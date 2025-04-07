@@ -14,21 +14,63 @@
   </tr>
 </table>
 
-This is the official code repository for the paper [Safety Mirage: How Spurious Correlations Undermine VLM Safety Fine-tuning](https://github.com/OPTML-Group/VLM-Safety-MU).
+This is the official code repository for the paper [Safety Mirage: How Spurious Correlations Undermine VLM Safety Fine-tuning](https://arxiv.org/abs/2503.11832).
 
-## Abstract
 
-Recent vision-language models (VLMs) have made remarkable strides in generative modeling with multimodal inputs, particularly text and images. However, their susceptibility to generating harmful content when exposed to unsafe queries raises critical safety concerns.
-While current alignment strategies primarily rely on supervised safety fine-tuning with curated datasets, we identify a fundamental limitation we call the "safety mirage" where supervised fine-tuning inadvertently reinforces spurious correlations between superficial textual patterns and safety responses, rather than fostering deep, intrinsic mitigation of harm.
-We show that these spurious correlations leave fine-tuned VLMs vulnerable even to a simple one-word modification-based attack, where substituting a single word in text queries with a spurious correlation-inducing alternative can effectively bypass safeguards.
-Additionally, these correlations contribute to the over prudence, causing fine-tuned VLMs to refuse benign queries unnecessarily.
-To address this issue, we show machine unlearning (MU) as a powerful alternative to supervised safety fine-tuning as it avoids biased feature-label mappings and directly removes harmful knowledge from VLMs while preserving their general capabilities.
-Extensive evaluations across safety benchmarks show that under one-word attacks, MU-based alignment reduces the attack success rate by up to 60.17% and cuts unnecessary rejections by over 84.20%.
-**WARNING: There exist AI generations that may be offensive in nature.**
+<!-- ## Release 
 
-## Code
+- [4/7] We have uploaded our unlearning-
+- [3/14] We have uploaded our first version of [Safety Mirage](https://arxiv.org/abs/2503.11832) to the Arxiv platform. -->
 
-We will release our data, code and model soon.
+## Install
+
+Our safety-unlearn framework has been developed on the LLaVA-1.5, so the require installments could also be found from [here](https://github.com/haotian-liu/LLaVA).
+Also, you could use following steps:
+
+1. Clone this repository and navigate to LLaVA folder
+```bash
+git clone https://github.com/OPTML-Group/VLM-Safety-MU
+cd VLM-Safety-MU
+```
+
+2. Install Package
+```Shell
+conda create -n llava python=3.10 -y
+conda activate llava
+pip install --upgrade pip  # enable PEP 660 support
+pip install -e .
+```
+
+3. Install additional packages for training cases
+```
+pip install -e ".[train]"
+pip install flash-attn --no-build-isolation
+```
+
+## Unlearning Fine-tune
+Our base model LLava-1.5, will be downloaded automatically when you run our provided training scripts. No action is needed.
+
+For full-parameter unlearning fine-tune, you should run
+```
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 bash scripts/v1_5/finetune_unlearn.sh
+```
+
+For LoRA unlearning fine-tune, you should run
+```
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 bash scripts/v1_5/finetune_unlearn_lora.sh
+```
+
+Some unlearn options to note:
+
+- `--unlearn_type`: unlearning algorithm type, which could be 'npo' or 'rmu'.
+- `--rmu_XXX`: are the specific hyperparameters for rmu algortihm.
+- `--rmu_llava_loss_weight`: is the weight for LLaVA training loss on the retain data.
+- `--rmu_retain_alpha`: is the weight for rmu loss on the retain data.
+- `--npo_beta`: is the balancing parameter for npo algortihm.
+- `--npo_forget_alpha`: is the weight for npo loss on the forget data.
+- `--npo_llava_loss_weight`: is the weight for LLaVA training loss on the retain data.
+
+Also, the data path and the output dictionary should also be specified~
 
 ## Contributors
 * [Yiwei Chen](https://www.linkedin.com/in/yiwei-melody-chen/)
@@ -36,11 +78,11 @@ We will release our data, code and model soon.
 
 ## Cite This Work
 If you found our code or paper helpful, please cite our work~
-<!-- ```
-@article{fan2024simplicity,
-  title={Simplicity Prevails: Rethinking Negative Preference Optimization for LLM Unlearning},
-  author={Fan, Chongyu and Liu, Jiancheng and Lin, Licong and Jia, Jinghan and Zhang, Ruiqi and Mei, Song and Liu, Sijia},
-  journal={arXiv preprint arXiv:2410.07163},
-  year={2024}
+```
+@article{chen2025safety,
+  title={Safety Mirage: How Spurious Correlations Undermine VLM Safety Fine-tuning},
+  author={Chen, Yiwei and Yao, Yuguang and Zhang, Yihua and Shen, Bingquan and Liu, Gaowen and Liu, Sijia},
+  journal={arXiv preprint arXiv:2503.11832},
+  year={2025}
 }
-``` -->
+```
