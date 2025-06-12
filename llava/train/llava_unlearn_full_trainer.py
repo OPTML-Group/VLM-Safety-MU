@@ -183,8 +183,8 @@ class LengthGroupedSampler(Sampler):
                 
 def get_module_by_path(model, path):
     """
-    通过路径字符串获取模型中的子模块。
-    例如，path='layers[7].self_attn.q_proj.lora_A'
+    Retrieve a submodule from the model using a path string.
+    For example, path='layers[7].self_attn.q_proj.lora_A'
     """
     current_module = model
     for part in path.split('.'):
@@ -215,17 +215,16 @@ class LLaVAUnlearnTrainer(Trainer):
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
-        forget_dataset: Optional[Dataset] = None,  # 新增参数
-        frozen_model: Union[PreTrainedModel, nn.Module] = None, # 新增参数
+        forget_dataset: Optional[Dataset] = None,  # new parameter for forget dataset
+        frozen_model: Union[PreTrainedModel, nn.Module] = None, # new parameter for frozen model
     ):
         """
-        初始化 LLaVAUnlearnTrainer。
+        Initialize the LLaVAUnlearnTrainer.
 
-        参数：
-            retain_dataset (Optional[Dataset]): 需要retain学习的数据集。
-            其他参数与父类 Trainer 相同。
+        Args:
+            retain_dataset (Optional[Dataset]): The dataset to be used for retention learning.
+            Other arguments are the same as those in the parent Trainer class.
         """
-        # 调用父类的 __init__ 方法，传递所有参数
         super().__init__(
             model=model,
             args=args,
@@ -245,7 +244,7 @@ class LLaVAUnlearnTrainer(Trainer):
         except AttributeError:
             base_model = self.model
         
-        # 创建frozen_model
+        # create the frozen_model
         self.frozen_model = frozen_model
         self.frozen_model.to(self.model.device)
         self.frozen_model = self.frozen_model.to(dtype=self.model.dtype)
@@ -256,22 +255,22 @@ class LLaVAUnlearnTrainer(Trainer):
             frozen_base_model = self.frozen_model
         
         if self.args.unlearn_type == "rmu":
-            # 确认 base_model 是否包含 'layers' 并且输出模型的层数
+            # Check if base_model contains 'layers' and get the number of layers
             if not hasattr(base_model, 'layers'):
-                raise AttributeError("基础模型缺少 'layers' 属性。")        
+                raise AttributeError("The base model is missing the 'layers' attribute.")        
             total_layers = len(base_model.layers)
-            # print(f"model共有 {total_layers} 层。")
+            # print(f"model has {total_layers} layers")
             if not (0 <= self.args.rmu_layer_id < total_layers):
-                raise ValueError(f"layer_id {self.args.rmu_layer_id} 超出范围。模型共有 {total_layers} 层。")
-        
-            # 初始化 LoRA 模块列表
+                raise ValueError(f"layer_id {self.args.rmu_layer_id} is out of range. The model has {total_layers} layers.")
+
+            # Initialize LoRA module lists
             self.frozen_lora_modules = []
             self.updated_lora_modules = [] 
-            # 提取updated_lora_modules
+            # Extract updated_lora_modules
             self.updated_lora_modules = eval('base_model.layers[{layer_id}]'.format(layer_id=self.args.rmu_layer_id))
             self.frozen_lora_modules = eval('frozen_base_model.layers[{layer_id}]'.format(layer_id=self.args.rmu_layer_id))
-            
-            # updated parameters: mm_projector, 以及params_id in layer_ids
+
+            # updated parameters: mm_projector, and params_id in layer_ids
             for param in self.model.parameters():
                 param.requires_grad = False           
             # updated parameters: mm_projector
@@ -289,7 +288,7 @@ class LLaVAUnlearnTrainer(Trainer):
                     print(param[0])    
             # import ipdb; ipdb.set_trace()
             
-        # 定义要更新的参数，仅包括 LoRA 模块的参数，也就是requires_grad=True的参数
+        # Define the parameters to be updated, including only the parameters of LoRA modules (i.e., those with requires_grad=True)
         # self.params_to_update = []
         # for param in base_model.layers[7].named_parameters():
         #     print(param[0], param[1].size(), param[1].requires_grad)  
@@ -314,7 +313,7 @@ class LLaVAUnlearnTrainer(Trainer):
             self.forget_iterators = [iter(dl) for dl in self.forget_dataloaders]
             
             if self.args.unlearn_type == "rmu":            
-                # 为forget_dataset生成控制向量
+                # generate control_vec for forget_dataset
                 # self.control_vectors_list = []
                 random_vector = torch.rand(1,1, base_model.config.hidden_size, dtype=self.model.dtype, device=self.model.device)
                 control_vec = random_vector / torch.norm(random_vector) * args.rmu_steering_coeff_list[0]
@@ -348,14 +347,14 @@ class LLaVAUnlearnTrainer(Trainer):
         )
         self.frozen_acc_model = self.frozen_accelerator.prepare(self.frozen_model)
             
-        # 初始化损失记录相关
+        # initilizing loss logging
         self.loss_dir = self.args.loss_dir if hasattr(self.args, 'loss_dir') else None
         if self.loss_dir:
             os.makedirs(self.loss_dir, exist_ok=True)
             self.loss_file_path = os.path.join(self.loss_dir, 'loss.json')
-            # 清空或创建loss.json文件
+            # create or reset loss.json file
             with open(self.loss_file_path, 'w') as f:
-                pass  # 清空文件
+                pass  
             logger.info(f"Initialized loss logging at {self.loss_file_path}")
         else:
             logger.warning("No 'loss_dir' specified in TrainingArguments. Loss will not be logged.")
@@ -445,45 +444,44 @@ class LLaVAUnlearnTrainer(Trainer):
         # if self.retain_dataset is not None and self.frozen_model:
         if self.frozen_model:
             
-            # 执行自定义的 RMU 训练步骤
             model.train()
             # self.frozen_model.eval()
             
             if self.args.unlearn_type == "rmu":
-                # 初始化总损失为主训练损失
+                # initialize loss variables
                 total_loss = torch.tensor(0.0, device=model.device)
             
                 if self.args.rmu_retain_alpha != 0:
                     frozen_model = self.frozen_acc_model
                 
                 try:
-                    # 获取一批需要取消学习的数据，默认forget_dataloader只有唯一一个
+                    # obtain the froget data, forget_dataloader is defaultly a list with only one element
                     forget_batch = next(self.forget_iterators[0])
-                    # 处理 forget_batch
+                    # process forget_batch
                     forget_inputs = self._prepare_inputs(forget_batch)
                     forget_inputs = {k: v.to(model.device) for k, v in forget_inputs.items()}
-                    # 计算unlearn loss
+                    # calculate unlearn loss
                     unlearn_loss = self.compute_unlearn_loss(model, forget_inputs)          
                     
                     if self.args.rmu_retain_alpha != 0:
-                        # 获取一批需要retain的数据，默认retain_dataloader只有唯一一个
+                        # obtain the retain data, retain_dataloader is defaultly a list with only one element
                         retain_batch = next(self.retain_iterators[0])
-                        # 处理 retain_batch
+                        # process retain_batch
                         retain_inputs = self._prepare_inputs(retain_batch)
                         retain_inputs = {k: v.to(model.device) for k, v in retain_inputs.items()}   
                         
-                        # 计算retain损失，确保模型在保留数据上的激活与 frozen_model 保持一致
+                        # Compute the retain loss to ensure the model's activations on the retained data remain consistent with the frozen_model
                         # self.test_model(model, frozen_model, retain_inputs)
                         retain_loss = self.compute_retain_loss(model, frozen_model, retain_inputs)
                     
                     else:
                         retain_loss = torch.tensor(0.0, device=model.device)
                     
-                    # 将所有损失相加，得到总损失
+                    # calculate total loss
                     total_loss += unlearn_loss + retain_loss
                         
                 except StopIteration:
-                    # 如果 forget_dataloader 已结束，重新初始化迭代器
+                    # if forget_dataloader has finished, resetting iterators.
                     logger.info("forget_dataloader or retain_dataloader exhausted. Resetting iterators.")
                     self.forget_iterators = [iter(dl) for dl in self.forget_dataloaders]
                     # if self.args.rmu_retain_alpha != 0:
@@ -509,17 +507,17 @@ class LLaVAUnlearnTrainer(Trainer):
                         total_loss += unlearn_loss + retain_loss
 
                     except StopIteration:
-                        # 如果重置后仍然没有数据，跳过反向传播
+                        # If there is still no data after reset, skip backpropagation
                         logger.warning("After resetting, forget_dataloader or retain_dataloader is still exhausted. Skipping loss computation.")
                         return torch.tensor(0.0, device=model.device)
 
-                # 计算llava的损失
+                # calculate llava default loss
                 inputs = self._prepare_inputs(inputs)     
                 llava_loss = self.compute_loss(model, inputs)
-                # 处理梯度累积    
+                # combine the unlearn_loss, retain_loss, llava_loss  
                 loss = total_loss + self.args.rmu_llava_loss_weight * llava_loss
                 
-                # 记录损失到loss.json
+                # record loss information to loss.json
                 if self.loss_dir:
                     loss_entry = {
                         "step": self.state.global_step,
@@ -532,7 +530,7 @@ class LLaVAUnlearnTrainer(Trainer):
                     }
                     try:
                         with open(self.loss_file_path, 'a') as f:
-                            f.write(json.dumps(loss_entry) + '\n\n')  # 每个条目后添加两个换行符作为分隔
+                            f.write(json.dumps(loss_entry) + '\n\n')  
                     except Exception as e:
                         logger.error(f"Failed to write loss entry to {self.loss_file_path}: {e}")
                         
@@ -545,9 +543,9 @@ class LLaVAUnlearnTrainer(Trainer):
                 frozen_model = self.frozen_acc_model
                     
                 try:
-                    # 获取一批需要取消学习的数据，默认forget_dataloader只有唯一一个
+                    # obtain the froget data, forget_dataloader is defaultly a list with only one element
                     forget_batch = next(self.forget_iterators[0])
-                    # 处理 forget_batch
+                    # process forget_batch
                     forget_inputs = self._prepare_inputs(forget_batch)
                     forget_inputs = {k: v.to(model.device) for k, v in forget_inputs.items()}
                     
@@ -580,7 +578,7 @@ class LLaVAUnlearnTrainer(Trainer):
                         retain_npo_loss = self.args.npo_retain_alpha * (F.logsigmoid(self.args.npo_beta * retain_neg_log_ratios).mean() * 2 / self.args.npo_beta)
                     
                 except StopIteration:
-                    # 如果 forget_dataloader 已结束，重新初始化迭代器
+                    # If there is still no data after reset, skip backpropagation
                     logger.info("forget_dataloader or retain_dataloader exhausted. Resetting iterators.")
                     self.forget_iterators = [iter(dl) for dl in self.forget_dataloaders]
                     
@@ -588,9 +586,9 @@ class LLaVAUnlearnTrainer(Trainer):
                         self.retain_iterators = [iter(dl) for dl in self.retain_dataloaders]
                         
                     try:
-                        # 获取一批需要取消学习的数据，默认forget_dataloader只有唯一一个
+                        # obtain the froget data, forget_dataloader is defaultly a list with only one element
                         forget_batch = next(self.forget_iterators[0])
-                        # 处理 forget_batch
+                        # process forget_batch
                         forget_inputs = self._prepare_inputs(forget_batch)
                         forget_inputs = {k: v.to(model.device) for k, v in forget_inputs.items()}
                         
@@ -623,19 +621,19 @@ class LLaVAUnlearnTrainer(Trainer):
                             retain_npo_loss = self.args.npo_retain_alpha * (F.logsigmoid(self.args.npo_beta * retain_neg_log_ratios).mean() * 2 / self.args.npo_beta)
 
                     except StopIteration:
-                        # 如果重置后仍然没有数据，跳过反向传播
+                        # if forget_dataloader has finished, resetting iterators.
                         logger.warning("After resetting, forget_dataloaderis still exhausted. Skipping loss computation.")
                         return torch.tensor(0.0, device=model.device)
                 
                 # import ipdb; ipdb.set_trace()
-                # 计算llava的损失
+                # compute llava default loss
                 inputs = self._prepare_inputs(inputs)     
                 llava_loss = self.compute_loss(model, inputs)
                 npo_loss = forget_npo_loss + retain_npo_loss
                 
                 loss = npo_loss + self.args.npo_llava_loss_weight * llava_loss
                 
-                # 记录损失到loss.json
+                # record loss information to loss.json
                 if self.loss_dir:
                     loss_entry = {
                         "step": self.state.global_step,
@@ -648,7 +646,7 @@ class LLaVAUnlearnTrainer(Trainer):
                     }
                     try:
                         with open(self.loss_file_path, 'a') as f:
-                            f.write(json.dumps(loss_entry) + '\n\n')  # 每个条目后添加两个换行符作为分隔
+                            f.write(json.dumps(loss_entry) + '\n\n')  
                     except Exception as e:
                         logger.error(f"Failed to write loss entry to {self.loss_file_path}: {e}")
                         
@@ -670,27 +668,27 @@ class LLaVAUnlearnTrainer(Trainer):
             output_loss = loss.detach() / self.args.gradient_accumulation_steps
             return output_loss
         else:
-            # 使用原始的 training_step
+            # using training_step function from the parent Trainer class
             return super().training_step(model, inputs)
                 
     def compute_unlearn_loss(self, model: nn.Module, forget_batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        计算取消学习损失。
+        Compute the unlearning loss.
 
-        参数：
-            model (nn.Module): 主训练模型。
-            forget_batch (Dict[str, torch.Tensor]): 当前批次的需要取消学习的数据。
+        Args:
+            model (nn.Module): The main training model.
+            forget_batch (Dict[str, torch.Tensor]): The current batch of data to be unlearned.
 
-        返回：
-            torch.Tensor: 取消学习损失值。
-        """         
+        Returns:
+            torch.Tensor: The unlearning loss value.
+        """
         updated_forget_activations =  self.forward_with_cache(model, forget_batch, module=self.updated_lora_modules, no_grad=False).to(self.model.device)
         # size:[batch_size, seq_length, hidden_size]
         
-        # 获取 updated_forget_activations 的形状
+        # obtain the size updated_forget_activations
         batch_size, seq_len, _ = updated_forget_activations.shape
         
-        # 使用 broadcast_to 扩展 self.control_vector
+        # use broadcast_to to expand self.control_vector
         expanded_control_vector = self.control_vector.broadcast_to(batch_size, seq_len, -1)
 
         # unlearn_loss = torch.nn.functional.mse_loss(updated_forget_activations, self.control_vector)
@@ -701,7 +699,7 @@ class LLaVAUnlearnTrainer(Trainer):
     def test_model(self, model, frozen_model: nn.Module, retain_batch: Dict[str, torch.Tensor]):
         frozen_model.eval()
         prepared_inputs = self._prepare_inputs(retain_batch)
-        import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         with torch.no_grad():
             try:
                 outputs = model(**prepared_inputs)
@@ -717,37 +715,36 @@ class LLaVAUnlearnTrainer(Trainer):
                 
     def compute_retain_loss(self, model: nn.Module, frozen_model: nn.Module, retain_batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        计算保留损失，确保主模型在保留数据上的激活与 frozen_model 保持一致。
+        Compute the retain loss to ensure that the activations of the main model on the retained data remain consistent with those of the frozen_model.
 
-        参数：
-            model (nn.Module): 主训练模型。
-            frozen_model (nn.Module): 冻结的模型副本。
-            forget_batch (Dict[str, torch.Tensor]): 当前批次的需要取消学习的数据。
+        Args:
+            model (nn.Module): The main training model.
+            frozen_model (nn.Module): A frozen copy of the model.
+            forget_batch (Dict[str, torch.Tensor]): The current batch of data to be unlearned.
 
-        返回：
-            torch.Tensor: 保留损失值。
+        Returns:
+            torch.Tensor: The retain loss value.
         """
         updated_retain_activations = self.forward_with_cache(model, retain_batch, module=self.updated_lora_modules, no_grad=False).to(self.model.device)
         updated_forget_activations = self.forward_with_cache(frozen_model, retain_batch, module=self.frozen_lora_modules, no_grad=True).to(self.model.device)
         
-        # 获取批处理大小和序列长度
+        # process batch size and sequence length
         batch_size_retain, seq_len_retain, feature_dim_retain = updated_retain_activations.shape
         batch_size_forget, seq_len_forget, feature_dim_forget = updated_forget_activations.shape
         # print('batch_size_retain:', batch_size_retain, 'seq_len_retain:', seq_len_retain, 'feature_dim_retain:', feature_dim_retain)
         # print('batch_size_forget:', batch_size_forget, 'seq_len_forget:', seq_len_forget, 'feature_dim_forget:', feature_dim_forget)
         
-        # 确保批处理大小一致
-        assert batch_size_retain == batch_size_forget, "批处理大小不一致"
+        # make sure batch size is consistent between retain and forget activations
+        assert batch_size_retain == batch_size_forget, "batch size is not consistent between retain and forget activations."
         
-        # 对齐序列长度
         min_seq_len = min(seq_len_retain, seq_len_forget)
         updated_retain_activations = updated_retain_activations[:, :min_seq_len, :]
         updated_forget_activations = updated_forget_activations[:, :min_seq_len, :]
         
         retain_loss = torch.nn.functional.mse_loss(updated_retain_activations, updated_forget_activations)
         
-        # 假设 alpha 是一个列表，长度与 forget_corpora 相同
-        alpha = float(self.args.rmu_retain_alpha)  # 根据您的具体需求调整索引
+        # Assume alpha is a list with the same length as forget_corpora
+        alpha = float(self.args.rmu_retain_alpha)  
         return alpha * retain_loss
                             
     def forward_with_cache(
@@ -769,7 +766,7 @@ class LLaVAUnlearnTrainer(Trainer):
             return None 
             
         handle = module.register_forward_hook(hook)
-        # # 如果 module 是 ModuleDict，则迭代其子模块并注册钩子
+        # # if module is ModuleDict, register hooks for each sub-module 
         # if isinstance(module, nn.ModuleDict):
         #     handles = []
         #     for name, sub_module in module.items():
@@ -779,7 +776,7 @@ class LLaVAUnlearnTrainer(Trainer):
         #     # print(f"Registering hook on module: {module}")
         #     handle = module.register_forward_hook(hook)
 
-        # 使用 Trainer 的 _prepare_inputs 方法预处理输入
+        # use Trainer _prepare_inputs function to prepare inputs
         prepared_inputs = self._prepare_inputs(inputs)
 
         base_model = get_base_model(model)
@@ -790,7 +787,7 @@ class LLaVAUnlearnTrainer(Trainer):
         else:
             base_model(**prepared_inputs)
 
-        # # 移除钩子
+        # # remove the hook
         # if isinstance(module, nn.ModuleDict):
         #     for handle in handles:
         #         handle.remove()
@@ -903,7 +900,7 @@ class LLaVAUnlearnTrainer(Trainer):
                 self.model.config.save_pretrained(output_dir)
                 torch.save(weight_to_save, os.path.join(output_dir, f'mm_projector.bin'))
         else:
-            super(LLaVATrainer, self)._save_checkpoint(model, trial, metrics)
+            super(LLaVAUnlearnTrainer, self)._save_checkpoint(model, trial, metrics)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         if getattr(self.args, 'tune_mm_mlp_adapter', False):
