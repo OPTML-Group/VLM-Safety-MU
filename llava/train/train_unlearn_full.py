@@ -1,19 +1,3 @@
-# Adopted from https://github.com/lm-sys/FastChat. Below is the original copyright:
-# Adopted from tatsu-lab@stanford_alpaca. Below is the original copyright:
-#    Copyright 2023 Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li
-#
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
-#
-#        http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
-
 import os
 import copy
 from dataclasses import dataclass, field
@@ -114,7 +98,7 @@ class TrainingArguments(transformers.TrainingArguments):
     lora_bias: str = "none"
     mm_projector_lr: Optional[float] = None
     group_by_modality_length: bool = field(default=False)
-    # 新加的unlearning arguments
+    # the new arguments for unlearning
     unlearn_type: str = field(default="rmu",
                               metadata={"help": "rmu, npo, grad-diff, dpo"})
     rmu_layer_id: int = field(default=7,
@@ -126,17 +110,17 @@ class TrainingArguments(transformers.TrainingArguments):
     rmu_steering_coeffs: str = field(default="300",
                        metadata={"help": "Steer vector weight in order of topic"})  
     rmu_retain_alpha: float = field(default=0.0,
-                       metadata={"help": "retain weight"})          # 保留损失的权重
+                       metadata={"help": "retain weight"})   
     rmu_llava_loss_weight: float = field(default=1.0,
                           metadata={"help": "layer to unlearn."})
     npo_llava_loss_weight: float = field(default="1.0",
-                       metadata={"help": "retain weight"})          # 保留损失的权重
+                       metadata={"help": "retain weight"})     
     npo_beta: float = field(default="0.1",
-                       metadata={"help": "npo beta"})          # 保留损失的权重
+                       metadata={"help": "npo beta"})   
     npo_retain_alpha: float = field(default="0.0",
-                    metadata={"help": "npo beta"})          # 保留损失的权重
+                    metadata={"help": "npo beta"})         
     npo_forget_alpha: float = field(default="1.0",
-                    metadata={"help": "npo beta"})          # 保留损失的权重
+                    metadata={"help": "npo beta"})        
     verbose: bool = field(default=True,
                             metadata={"help": "Logging the activations norms and cosine at each step"})
     loss_dir: str = field(default="./checkpoints-unlearn/loss",
@@ -814,7 +798,7 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                 data_path=data_args.forget_data_path,
                                 data_args=data_args)
 
-    # 增加的sample数量
+    # increse the number of samples in retain_dataset to match forget_dataset
     # num_samples = len(forget_dataset)
     # if len(retain_dataset) > num_samples:
     #     retain_dataset.list_data_dict = retain_dataset.list_data_dict[:num_samples]
@@ -1013,22 +997,20 @@ def train(attn_implementation=None):
         model.initialize_vision_tokenizer(model_args, tokenizer=tokenizer)
 
         
-    # 冻结frozen_model的参数        
+    # frozen the parameters of frozen_model   
     for param in frozen_model.parameters():
         param.requires_grad = False
-    frozen_model.eval()  # 确保模型处于评估模式
+    frozen_model.eval()  # make sure the frozen model is in eval mode
     
     # for param in model.parameters():
     #     param.requires_grad = False
     
-    # # **新增部分：冻结视觉编码器和投影层的参数**
+    # # frozen the parameters of the vision tower and projection layer
     # if model_args.vision_tower is not None:
-    #     # # 冻结视觉编码器的参数
     #     # vision_tower = model.get_vision_tower()
     #     # for param in vision_tower.parameters():
     #     #     param.requires_grad = False
 
-    #     # 冻结投影层的参数
     #     projection = model.get_model().mm_projector
     #     for param in projection.parameters():
     #         param.requires_grad = True
