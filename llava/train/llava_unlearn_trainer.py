@@ -211,8 +211,8 @@ class LLaVAUnlearnTrainer(Trainer):
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
-        forget_dataset: Optional[Dataset] = None,  # 新增参数
-        frozen_model: Union[PreTrainedModel, nn.Module] = None, # 新增参数
+        forget_dataset: Optional[Dataset] = None,  # new parameter for forget dataset
+        frozen_model: Union[PreTrainedModel, nn.Module] = None, # new parameter for frozen model
     ):
         """
         Initialized LLaVAUnlearnTrainer。
@@ -221,7 +221,6 @@ class LLaVAUnlearnTrainer(Trainer):
             forget_dataset (Optional[Dataset]): forget dataset
             frozen_model (Union[PreTrainedModel, nn.Module]): frozen model
         """
-        # 调用父类的 __init__ 方法，传递所有参数
         super().__init__(
             model=model,
             args=args,
@@ -241,7 +240,7 @@ class LLaVAUnlearnTrainer(Trainer):
         except AttributeError:
             base_model = self.model
         
-        # 创建frozen_model
+        # create frozen_model
         self.frozen_model = frozen_model
         self.frozen_model.to(self.model.device)
         self.frozen_model = self.frozen_model.to(dtype=self.model.dtype)
@@ -257,18 +256,18 @@ class LLaVAUnlearnTrainer(Trainer):
         #     param.requires_grad = False  
             
         if self.args.unlearn_type == "rmu":
-            # 确认 base_model 是否包含 'layers' 并且输出模型的层数
+            # Ensure that base_model has the 'layers' attribute and retrieve the number of layers
             if not hasattr(base_model, 'layers'):
-                raise AttributeError("基础模型缺少 'layers' 属性。")        
+                raise AttributeError("The base model is missing the 'layers' attribute.")        
             total_layers = len(base_model.layers)
-            # print(f"model共有 {total_layers} 层。")
+            # print(f"The model has {total_layers} layers.")
             if not (0 <= self.args.rmu_layer_id < total_layers):
-                raise ValueError(f"layer_id {self.args.rmu_layer_id} 超出范围。模型共有 {total_layers} 层。")
-        
-            # 初始化 LoRA 模块列表
+                raise ValueError(f"layer_id {self.args.rmu_layer_id} is out of range. The model has {total_layers} layers.")
+
+            # Initialize lists for LoRA modules
             self.frozen_lora_modules = []
             self.updated_lora_modules = [] 
-            # 提取updated_lora_modules
+            # Extract updated_lora_modules
             self.updated_lora_modules = eval('base_model.layers[{layer_id}]'.format(layer_id=self.args.rmu_layer_id))
             self.frozen_lora_modules = eval('frozen_base_model.layers[{layer_id}]'.format(layer_id=self.args.rmu_layer_id))
 
@@ -285,7 +284,7 @@ class LLaVAUnlearnTrainer(Trainer):
             self.forget_iterators = [iter(dl) for dl in self.forget_dataloaders]
             
             if self.args.unlearn_type == "rmu":            
-                # 为forget_dataset生成控制向量
+                # generate control vector for forget_dataset
                 # self.control_vectors_list = []
                 random_vector = torch.rand(1,1, base_model.config.hidden_size, dtype=self.model.dtype, device=self.model.device)
                 control_vec = random_vector / torch.norm(random_vector) * args.rmu_steering_coeff_list[0]
@@ -414,24 +413,24 @@ class LLaVAUnlearnTrainer(Trainer):
         # if self.retain_dataset is not None and self.frozen_model:
         if self.frozen_model:
             
-            # 执行自定义的 RMU 训练步骤
+            # generate RMU unlearn training step
             model.train()
             # self.frozen_model.eval()
             
             if self.args.unlearn_type == "rmu":
-                # 初始化总损失为主训练损失
+                # initialize total loss
                 total_loss = torch.tensor(0.0, device=model.device)
             
                 if self.args.rmu_retain_alpha != 0:
                     frozen_model = self.frozen_acc_model
                 
                 try:
-                    # 获取一批需要取消学习的数据，默认forget_dataloader只有唯一一个
+                    # obtain the froget data, forget_dataloader is defaultly a list with only one element
                     forget_batch = next(self.forget_iterators[0])
-                    # 处理 forget_batch
+                    # process forget_batch
                     forget_inputs = self._prepare_inputs(forget_batch)
                     forget_inputs = {k: v.to(model.device) for k, v in forget_inputs.items()}
-                    # 计算unlearn loss
+                    # calculate unlearn loss
                     unlearn_loss = self.compute_unlearn_loss(model, forget_inputs)          
                     
                     if self.args.rmu_retain_alpha != 0:
@@ -843,7 +842,7 @@ class LLaVAUnlearnTrainer(Trainer):
                 self.model.config.save_pretrained(output_dir)
                 torch.save(weight_to_save, os.path.join(output_dir, f'mm_projector.bin'))
         else:
-            super(LLaVATrainer, self)._save_checkpoint(model, trial, metrics)
+            super(LLaVAUnlearnTrainer, self)._save_checkpoint(model, trial, metrics)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         if getattr(self.args, 'tune_mm_mlp_adapter', False):
