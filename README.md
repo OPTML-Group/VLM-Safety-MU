@@ -73,7 +73,7 @@ Some unlearn options to note:
 Also, the data path and the output dictionary should also be specified~
 
 ## Contributors
-* [Yiwei Chen](https://www.linkedin.com/in/yiwei-melody-chen/)
+* [Yiwei Chen](https://yiwei-chenn.github.io/)
 * [Yuguang Yao](https://www.cse.msu.edu/~yaoyugua/)
 
 ## Cite This Work
