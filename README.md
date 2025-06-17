@@ -72,9 +72,9 @@ Some unlearn options to note:
 
 Also, the data path and the output dictionary should also be specified~
 
-## Contributors
+<!-- ## Contributors
 * [Yiwei Chen](https://yiwei-chenn.github.io/)
-* [Yuguang Yao](https://www.cse.msu.edu/~yaoyugua/)
+* [Yuguang Yao](https://www.cse.msu.edu/~yaoyugua/) -->
 
 ## Cite This Work
 If you found our code or paper helpful, please cite our work~
